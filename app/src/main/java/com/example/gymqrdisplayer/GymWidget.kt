@@ -31,7 +31,7 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.first
 
 class GymWidget : GlanceAppWidget() {
-    
+
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     companion object {
@@ -60,7 +60,7 @@ class GymWidget : GlanceAppWidget() {
             contentAlignment = Alignment.Center
         ) {
             if (!qrContent.isNullOrEmpty()) {
-                val bitmap = GymRepository().createQRCodeBitmap(qrContent)
+                val bitmap = GymRepository.instance.createQRCodeBitmap(qrContent)
                 // QR Code 容器：保持白色背景以利掃描
                 Box(
                     modifier = GlanceModifier
@@ -75,7 +75,7 @@ class GymWidget : GlanceAppWidget() {
                         modifier = GlanceModifier.fillMaxSize()
                     )
                 }
-                
+
                 // 右下角的小提示
                 Box(
                     modifier = GlanceModifier.fillMaxSize().padding(8.dp),
@@ -112,11 +112,11 @@ class GymWidget : GlanceAppWidget() {
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         Log.d("GymWidget", "RefreshAction triggered via Tap")
-        val repository = GymRepository()
+        val repository = GymRepository.instance
         val dataStore = DataStoreManager(context)
         val uid = dataStore.uidFlow.first()
-        val pwd = dataStore.pwdFlow.first()
-        
+        val pwd = dataStore.getPassword()
+
         if (uid != null && pwd != null) {
             val hashCode = repository.getHashCode()
             if (hashCode != null) {

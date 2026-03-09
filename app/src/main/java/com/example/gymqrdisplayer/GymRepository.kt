@@ -20,27 +20,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class GymRepository {
-    private val TAG = "GymRepo"
 
-    private val client = OkHttpClient.Builder()
-        .cookieJar(object : CookieJar {
-            private val cookieStore = mutableMapOf<String, MutableMap<String, Cookie>>()
-            
-            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                val hostCookies = cookieStore.getOrPut(url.host) { mutableMapOf() }
-                cookies.forEach { hostCookies[it.name] = it }
-                Log.d(TAG, "Saved Cookies: ${cookies.joinToString { "${it.name}=${it.value}" }}")
-            }
+    companion object {
+        val instance: GymRepository by lazy { GymRepository() }
+        internal val TAG = "GymRepo"
 
-            override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                val cookies = cookieStore[url.host]?.values?.toList() ?: listOf()
-                Log.d(TAG, "Loading Cookies for ${url.host}: ${cookies.size} found")
-                return cookies
-            }
-        })
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+        private val client by lazy {
+            OkHttpClient.Builder()
+                .cookieJar(object : CookieJar {
+                    private val cookieStore = mutableMapOf<String, MutableMap<String, Cookie>>()
+
+                    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+                        val hostCookies = cookieStore.getOrPut(url.host) { mutableMapOf() }
+                        cookies.forEach { hostCookies[it.name] = it }
+                        Log.d(TAG, "Saved Cookies: ${cookies.joinToString { "${it.name}=${it.value}" }}")
+                    }
+
+                    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+                        val cookies = cookieStore[url.host]?.values?.toList() ?: listOf()
+                        Log.d(TAG, "Loading Cookies for ${url.host}: ${cookies.size} found")
+                        return cookies
+                    }
+                })
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .build()
+        }
+    }
 
     private val clientID = "83137586U1"
 
@@ -51,7 +57,7 @@ class GymRepository {
                 .url("https://infapp.eip.tw/infinitefit/login?dlogin=n")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
-            
+
             client.newCall(request).execute().use { response ->
                 val html = response.body?.string() ?: ""
                 val doc = Jsoup.parse(html)

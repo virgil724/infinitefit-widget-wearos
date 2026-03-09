@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val dataStoreManager = DataStoreManager(this)
-        
+
         enableEdgeToEdge()
         setContent {
             GYMQRDisplayerTheme {
@@ -57,11 +57,13 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
     val context = LocalContext.current
     var uid by remember { mutableStateOf("") }
     var pwd by remember { mutableStateOf("") }
+    var loginError by remember { mutableStateOf<String?>(null) }
+    var isLoggingIn by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         uid = dataStoreManager.uidFlow.first() ?: ""
-        pwd = dataStoreManager.pwdFlow.first() ?: ""
+        pwd = dataStoreManager.getPassword() ?: ""
     }
 
     Column(
@@ -70,7 +72,7 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             .padding(24.dp)
     ) {
         Text(
-            text = "GYM QR Displayer", 
+            text = "GYM QR Displayer",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold
         )
@@ -79,44 +81,87 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         OutlinedTextField(
             value = uid,
             onValueChange = { uid = it },
             label = { Text("Account (UID)") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            isError = loginError != null && uid.isBlank()
         )
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         OutlinedTextField(
             value = pwd,
             onValueChange = { pwd = it },
             label = { Text("Password (PWD)") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            isError = loginError != null && pwd.isBlank()
         )
-        
+
+        // Error message
+        if (loginError != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = loginError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Button(
             onClick = {
+                // Input validation
+                if (uid.isBlank() || pwd.isBlank()) {
+                    loginError = "Please enter both account and password"
+                    return@Button
+                }
+
+                isLoggingIn = true
+                loginError = null
+
                 scope.launch {
-                    dataStoreManager.saveCredentials(uid, pwd)
+                    try {
+                        // Validate credentials by attempting login
+                        val repository = GymRepository.instance
+                        val hashCode = repository.getHashCode()
+
+                        if (hashCode != null) {
+                            val uuid = repository.login(uid, pwd, hashCode)
+                            if (uuid != null) {
+                                // Login successful, save credentials
+                                dataStoreManager.saveCredentials(uid, pwd)
+                                loginError = null
+                            } else {
+                                loginError = "Invalid account or password"
+                            }
+                        } else {
+                            loginError = "Connection error, please try again"
+                        }
+                    } catch (e: Exception) {
+                        loginError = "Error: ${e.message}"
+                    } finally {
+                        isLoggingIn = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium
+            shape = MaterialTheme.shapes.medium,
+            enabled = !isLoggingIn
         ) {
-            Text("Save Credentials")
+            Text(if (isLoggingIn) "Logging in..." else "Login")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // 新增：顯示 QR Code 的按鈕 (觸發 Bottom Sheet)
         Button(
             onClick = {
@@ -134,7 +179,7 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
         }
 
         Spacer(modifier = Modifier.height(48.dp))
-        
+
         Text(
             text = "Instructions",
             style = MaterialTheme.typography.titleMedium,
@@ -142,7 +187,7 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "1. Save your credentials above.\n" +
+            text = "1. Enter your credentials and click Login.\n" +
                    "2. Click 'Show My QR Code' to test.\n" +
                    "3. For faster access, add the 'GYM QR' widget to your home screen.",
             style = MaterialTheme.typography.bodyMedium,

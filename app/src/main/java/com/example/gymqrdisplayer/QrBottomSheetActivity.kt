@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import com.example.gymqrdisplayer.ui.theme.GYMQRDisplayerTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -22,16 +23,16 @@ class QrBottomSheetActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         setContent {
             GYMQRDisplayerTheme {
                 val sheetState = rememberModalBottomSheetState()
                 var showSheet by remember { mutableStateOf(true) }
                 val scope = rememberCoroutineScope()
-                
+
                 if (showSheet) {
                     ModalBottomSheet(
-                        onDismissRequest = { 
+                        onDismissRequest = {
                             showSheet = false
                             finish()
                         },
@@ -39,7 +40,14 @@ class QrBottomSheetActivity : ComponentActivity() {
                         containerColor = MaterialTheme.colorScheme.surface,
                         dragHandle = { BottomSheetDefaults.DragHandle() }
                     ) {
-                        QrContent()
+                        QrContent(onRetry = {
+                            // Restart the QR generation process
+                            scope.launch {
+                                showSheet = false
+                                delay(100)
+                                showSheet = true
+                            }
+                        })
                     }
                 }
             }
@@ -48,21 +56,23 @@ class QrBottomSheetActivity : ComponentActivity() {
 }
 
 @Composable
-fun QrContent() {
+fun QrContent(onRetry: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val repository = remember { GymRepository() }
+    val repository = remember { GymRepository.instance }
     val dataStore = remember { DataStoreManager(context) }
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    fun loadQrCode() {
         scope.launch {
+            isLoading = true
+            errorMsg = null
             try {
                 val uid = dataStore.uidFlow.first()
-                val pwd = dataStore.pwdFlow.first()
-                
+                val pwd = dataStore.getPassword()
+
                 if (uid != null && pwd != null) {
                     val hashCode = repository.getHashCode()
                     if (hashCode != null) {
@@ -75,7 +85,7 @@ fun QrContent() {
                                 errorMsg = "Failed to generate QR"
                             }
                         } else {
-                            errorMsg = "Login failed"
+                            errorMsg = "Login failed - check credentials"
                         }
                     } else {
                         errorMsg = "Connection error"
@@ -91,6 +101,10 @@ fun QrContent() {
         }
     }
 
+    LaunchedEffect(Unit) {
+        loadQrCode()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -103,8 +117,17 @@ fun QrContent() {
         } else if (errorMsg != null) {
             Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { /* retry logic could go here */ }) {
-                Text("Close")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(onClick = onRetry) {
+                    Text("Retry")
+                }
+                Button(onClick = {
+                    context.let { ctx -> (ctx as? ComponentActivity)?.finish() }
+                }) {
+                    Text("Close")
+                }
             }
         } else if (qrBitmap != null) {
             Surface(
