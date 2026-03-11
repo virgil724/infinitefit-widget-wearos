@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -36,6 +37,7 @@ class GymWidget : GlanceAppWidget() {
 
     companion object {
         val QR_CODE_KEY = stringPreferencesKey("qr_code_content")
+        val IS_LOADING_KEY = booleanPreferencesKey("is_loading")
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -43,23 +45,45 @@ class GymWidget : GlanceAppWidget() {
             GlanceTheme {
                 val prefs = currentState<Preferences>()
                 val qrContent = prefs[QR_CODE_KEY]
-                WidgetContent(qrContent)
+                val isLoading = prefs[IS_LOADING_KEY] ?: false
+                WidgetContent(qrContent, isLoading)
             }
         }
     }
 
     @Composable
-    private fun WidgetContent(qrContent: String?) {
+    private fun WidgetContent(qrContent: String?, isLoading: Boolean) {
         // 整個小工具背景都設為可點擊，點擊即觸發刷新
+        val baseModifier = GlanceModifier
+            .fillMaxSize()
+            .background(GlanceTheme.colors.surface)
+            .cornerRadius(16.dp)
+
+        val modifier = if (isLoading) {
+            baseModifier
+        } else {
+            baseModifier.clickable(actionRunCallback<RefreshAction>())
+        }
+
         Box(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .background(GlanceTheme.colors.surface)
-                .cornerRadius(16.dp)
-                .clickable(actionRunCallback<RefreshAction>()),
+            modifier = modifier,
             contentAlignment = Alignment.Center
         ) {
-            if (!qrContent.isNullOrEmpty()) {
+            if (isLoading) {
+                // 加載中狀態
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "更新中...",
+                        style = TextStyle(
+                            color = GlanceTheme.colors.primary,
+                            fontSize = 16.sp
+                        )
+                    )
+                }
+            } else if (!qrContent.isNullOrEmpty()) {
                 val bitmap = GymRepository.instance.createQRCodeBitmap(qrContent)
                 // QR Code 容器：保持白色背景以利掃描
                 Box(
@@ -118,6 +142,12 @@ class RefreshAction : ActionCallback {
         val pwd = dataStore.getPassword()
 
         if (uid != null && pwd != null) {
+            // 開始加載，設置加載狀態
+            updateAppWidgetState(context, glanceId) { prefs ->
+                prefs[GymWidget.IS_LOADING_KEY] = true
+            }
+            GymWidget().update(context, glanceId)
+
             val hashCode = repository.getHashCode()
             if (hashCode != null) {
                 val uuid = repository.login(uid, pwd, hashCode)
@@ -126,6 +156,7 @@ class RefreshAction : ActionCallback {
                     if (qrCode != null) {
                         updateAppWidgetState(context, glanceId) { prefs ->
                             prefs[GymWidget.QR_CODE_KEY] = qrCode
+                            prefs[GymWidget.IS_LOADING_KEY] = false
                         }
                         GymWidget().update(context, glanceId)
                         return
@@ -133,6 +164,11 @@ class RefreshAction : ActionCallback {
                 }
             }
         }
+        // 失敗時也設置加載狀態為 false
+        updateAppWidgetState(context, glanceId) { prefs ->
+            prefs[GymWidget.IS_LOADING_KEY] = false
+        }
+        GymWidget().update(context, glanceId)
         Log.e("GymWidget", "RefreshAction failed")
     }
 }
