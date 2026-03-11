@@ -1,14 +1,38 @@
-package com.example.gymqrdisplayer
+﻿package com.example.gymqrdisplayer
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,9 +50,17 @@ class QrBottomSheetActivity : ComponentActivity() {
 
         setContent {
             GYMQRDisplayerTheme {
-                val sheetState = rememberModalBottomSheetState()
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 var showSheet by remember { mutableStateOf(true) }
                 val scope = rememberCoroutineScope()
+
+                LaunchedEffect(showSheet) {
+                    if (showSheet) {
+                        sheetState.expand()
+                        delay(120)
+                        sheetState.expand()
+                    }
+                }
 
                 if (showSheet) {
                     ModalBottomSheet(
@@ -41,7 +73,6 @@ class QrBottomSheetActivity : ComponentActivity() {
                         dragHandle = { BottomSheetDefaults.DragHandle() }
                     ) {
                         QrContent(onRetry = {
-                            // Restart the QR generation process
                             scope.launch {
                                 showSheet = false
                                 delay(100)
@@ -64,6 +95,7 @@ fun QrContent(onRetry: () -> Unit) {
     var isLoading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val placeholderBoxSize = 230.dp
 
     fun loadQrCode() {
         scope.launch {
@@ -111,11 +143,46 @@ fun QrContent(onRetry: () -> Unit) {
             .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text(
+            text = "Your QR Code",
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = "Show this to the front desk to check in.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
         if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.padding(32.dp))
-            Text("Generating QR Code...")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Surface(
+                    modifier = Modifier.size(placeholderBoxSize),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                        Text("Generating QR Code...")
+                    }
+                }
+            }
         } else if (errorMsg != null) {
-            Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(
+                    errorMsg!!,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -132,20 +199,28 @@ fun QrContent(onRetry: () -> Unit) {
         } else if (qrBitmap != null) {
             Surface(
                 modifier = Modifier
-                    .size(220.dp)
-                    .padding(8.dp),
-                shape = RoundedCornerShape(12.dp),
+                    .size(placeholderBoxSize)
+                    .padding(6.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = Color.White,
                 shadowElevation = 4.dp
             ) {
                 Image(
                     bitmap = qrBitmap!!.asImageBitmap(),
                     contentDescription = "QR Code",
-                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                    modifier = Modifier.fillMaxSize().padding(14.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text("Scan to Enter", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Tip: Keep your screen brightness high for faster scanning.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }

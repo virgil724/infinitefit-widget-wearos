@@ -1,10 +1,12 @@
-package com.example.gymqrdisplayer
+﻿package com.example.gymqrdisplayer
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
@@ -22,10 +24,12 @@ import androidx.glance.text.TextStyle
 import androidx.glance.background
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.GlanceTheme
-import androidx.compose.ui.graphics.Color
+import androidx.glance.text.FontWeight
 
 class GymPopupWidget : GlanceAppWidget() {
-    
+
+    override val stateDefinition = androidx.glance.state.PreferencesGlanceStateDefinition
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
             GlanceTheme {
@@ -37,41 +41,60 @@ class GymPopupWidget : GlanceAppWidget() {
     @Composable
     private fun WidgetContent() {
         Box(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .background(GlanceTheme.colors.surface)
-                .cornerRadius(16.dp)
-                .clickable(actionRunCallback<LaunchPopupAction>()),
+            modifier = GlanceModifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Row(
+                modifier = GlanceModifier
+                    .width(150.dp)
+                    .height(56.dp)
+                    .background(GlanceTheme.colors.surfaceVariant)
+                    .cornerRadius(28.dp)
+                    .clickable(actionRunCallback<LaunchPopupAction>())
+                    .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 使用一個佔位圖示或簡約設計
                 Box(
                     modifier = GlanceModifier
-                        .size(64.dp)
-                        .background(GlanceTheme.colors.primaryContainer)
-                        .cornerRadius(32.dp),
+                        .size(48.dp)
+                        .background(GlanceTheme.colors.primary)
+                        .cornerRadius(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_qr_pattern),
+                        contentDescription = "QR Code Icon",
+                        modifier = GlanceModifier.size(24.dp),
+                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onPrimary)
+                    )
+                }
+
+                Spacer(modifier = GlanceModifier.width(12.dp))
+
+                Column(
+                    modifier = GlanceModifier.defaultWeight(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "QR",
+                        text = "GYM",
+                        maxLines = 1,
                         style = TextStyle(
-                            color = GlanceTheme.colors.onPrimaryContainer,
-                            fontSize = 24.sp
+                            color = GlanceTheme.colors.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Text(
+                        text = "Quick Check-in",
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = GlanceTheme.colors.onSurfaceVariant,
+                            fontSize = 10.sp
                         )
                     )
                 }
-                Spacer(GlanceModifier.height(8.dp))
-                Text(
-                    text = "Tap to Open",
-                    style = TextStyle(
-                        color = GlanceTheme.colors.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                )
+
+                Spacer(modifier = GlanceModifier.width(12.dp))
             }
         }
     }

@@ -1,4 +1,4 @@
-package com.example.gymqrdisplayer
+﻿package com.example.gymqrdisplayer
 
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -15,6 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,18 +29,15 @@ class GymRepository {
         private val client by lazy {
             OkHttpClient.Builder()
                 .cookieJar(object : CookieJar {
-                    private val cookieStore = mutableMapOf<String, MutableMap<String, Cookie>>()
+                    private val cookieStore = ConcurrentHashMap<String, ConcurrentHashMap<String, Cookie>>()
 
                     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                        val hostCookies = cookieStore.getOrPut(url.host) { mutableMapOf() }
+                        val hostCookies = cookieStore.computeIfAbsent(url.host) { ConcurrentHashMap() }
                         cookies.forEach { hostCookies[it.name] = it }
-                        Log.d(TAG, "Saved Cookies: ${cookies.joinToString { "${it.name}=${it.value}" }}")
                     }
 
                     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                        val cookies = cookieStore[url.host]?.values?.toList() ?: listOf()
-                        Log.d(TAG, "Loading Cookies for ${url.host}: ${cookies.size} found")
-                        return cookies
+                        return cookieStore[url.host]?.values?.toList().orEmpty()
                     }
                 })
                 .connectTimeout(15, TimeUnit.SECONDS)
@@ -62,7 +60,9 @@ class GymRepository {
                 val html = response.body?.string() ?: ""
                 val doc = Jsoup.parse(html)
                 val hashCode = doc.select("input[name=HashCode]").`val`()
-                Log.d(TAG, "HashCode Result: $hashCode")
+                if (hashCode.isNotBlank()) {
+                    Log.d(TAG, "HashCode fetched")
+                }
                 hashCode
             }
         } catch (e: Exception) {
@@ -73,7 +73,7 @@ class GymRepository {
 
     suspend fun login(uid: String, pwd: String, hashCode: String): String? = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "2. Logging in (UID: $uid)...")
+            Log.d(TAG, "2. Logging in...")
             val formBody = FormBody.Builder()
                 .add("ClientID", clientID)
                 .add("HashCode", hashCode)
@@ -91,14 +91,12 @@ class GymRepository {
 
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string() ?: ""
-                Log.d(TAG, "Login Response: $responseBody")
                 val json = JSONObject(responseBody)
                 if (json.optString("Status") == "Success") {
-                    val uuid = json.getString("uuid")
-                    Log.d(TAG, "Login Success, UUID: $uuid")
-                    uuid
+                    Log.d(TAG, "Login success")
+                    json.getString("uuid")
                 } else {
-                    Log.e(TAG, "Login Failed: ${json.optString("Msg")}")
+                    Log.e(TAG, "Login failed: ${json.optString("Msg")}")
                     null
                 }
             }
@@ -127,7 +125,6 @@ class GymRepository {
 
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string() ?: ""
-                Log.d(TAG, "QR Response: $responseBody")
                 val json = JSONObject(responseBody)
                 if (json.optString("Status") == "Success") {
                     json.getString("QRCode")

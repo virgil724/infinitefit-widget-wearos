@@ -1,22 +1,31 @@
-package com.example.gymqrdisplayer
+﻿package com.example.gymqrdisplayer
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +79,7 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp)
     ) {
         Text(
@@ -77,92 +88,121 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Enter your credentials below",
+            text = "Sign in once, then access your QR quickly from the home screen widget.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = uid,
-            onValueChange = { uid = it },
-            label = { Text("Account (UID)") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = loginError != null && uid.isBlank()
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = pwd,
-            onValueChange = { pwd = it },
-            label = { Text("Password (PWD)") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = loginError != null && pwd.isBlank()
-        )
-
-        // Error message
-        if (loginError != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = loginError!!,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = {
-                // Input validation
-                if (uid.isBlank() || pwd.isBlank()) {
-                    loginError = "Please enter both account and password"
-                    return@Button
-                }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "Account",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
 
-                isLoggingIn = true
-                loginError = null
+                OutlinedTextField(
+                    value = uid,
+                    onValueChange = { uid = it },
+                    label = { Text("UID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = loginError != null && uid.isBlank(),
+                    supportingText = { Text("Your gym account ID") }
+                )
 
-                scope.launch {
-                    try {
-                        // Validate credentials by attempting login
-                        val repository = GymRepository.instance
-                        val hashCode = repository.getHashCode()
+                Spacer(modifier = Modifier.height(12.dp))
 
-                        if (hashCode != null) {
-                            val uuid = repository.login(uid, pwd, hashCode)
-                            if (uuid != null) {
-                                // Login successful, save credentials
-                                dataStoreManager.saveCredentials(uid, pwd)
-                                loginError = null
-                            } else {
-                                loginError = "Invalid account or password"
-                            }
-                        } else {
-                            loginError = "Connection error, please try again"
-                        }
-                    } catch (e: Exception) {
-                        loginError = "Error: ${e.message}"
-                    } finally {
-                        isLoggingIn = false
+                OutlinedTextField(
+                    value = pwd,
+                    onValueChange = { pwd = it },
+                    label = { Text("Password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = loginError != null && pwd.isBlank(),
+                    supportingText = { Text("Stored securely on this device") }
+                )
+
+                if (loginError != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text(
+                            text = loginError!!,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            enabled = !isLoggingIn
-        ) {
-            Text(if (isLoggingIn) "Logging in..." else "Login")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (uid.isBlank() || pwd.isBlank()) {
+                            loginError = "Please enter both account and password"
+                            return@Button
+                        }
+
+                        isLoggingIn = true
+                        loginError = null
+
+                        scope.launch {
+                            try {
+                                val repository = GymRepository.instance
+                                val hashCode = repository.getHashCode()
+
+                                if (hashCode != null) {
+                                    val uuid = repository.login(uid, pwd, hashCode)
+                                    if (uuid != null) {
+                                        dataStoreManager.saveCredentials(uid, pwd)
+                                        loginError = null
+                                    } else {
+                                        loginError = "Invalid account or password"
+                                    }
+                                } else {
+                                    loginError = "Connection error, please try again"
+                                }
+                            } catch (e: Exception) {
+                                loginError = "Error: ${e.message}"
+                            } finally {
+                                isLoggingIn = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    enabled = !isLoggingIn
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isLoggingIn) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.width(16.dp).height(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Logging in...")
+                        } else {
+                            Text("Login")
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 新增：顯示 QR Code 的按鈕 (觸發 Bottom Sheet)
         Button(
             onClick = {
                 val intent = Intent(context, QrBottomSheetActivity::class.java)
@@ -178,21 +218,30 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             Text("Show My QR Code")
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
-        Text(
-            text = "Instructions",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "1. Enter your credentials and click Login.\n" +
-                   "2. Click 'Show My QR Code' to test.\n" +
-                   "3. For faster access, add the 'GYM QR' widget to your home screen.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified
-        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Quick Guide",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "1. Sign in once to save your credentials.\n" +
+                        "2. Tap 'Show My QR Code' to verify.\n" +
+                        "3. Add the widget for one-tap access.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

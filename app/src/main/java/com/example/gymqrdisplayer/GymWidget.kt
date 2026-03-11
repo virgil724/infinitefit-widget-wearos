@@ -1,4 +1,4 @@
-package com.example.gymqrdisplayer
+﻿package com.example.gymqrdisplayer
 
 import android.content.Context
 import android.util.Log
@@ -53,24 +53,16 @@ class GymWidget : GlanceAppWidget() {
 
     @Composable
     private fun WidgetContent(qrContent: String?, isLoading: Boolean) {
-        // 整個小工具背景都設為可點擊，點擊即觸發刷新
         val baseModifier = GlanceModifier
             .fillMaxSize()
             .background(GlanceTheme.colors.surface)
             .cornerRadius(16.dp)
 
-        val modifier = if (isLoading) {
-            baseModifier
-        } else {
-            baseModifier.clickable(actionRunCallback<RefreshAction>())
-        }
-
         Box(
-            modifier = modifier,
+            modifier = baseModifier.clickable(actionRunCallback<RefreshAction>()),
             contentAlignment = Alignment.Center
         ) {
             if (isLoading) {
-                // 加載中狀態
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalAlignment = Alignment.CenterVertically
@@ -85,7 +77,7 @@ class GymWidget : GlanceAppWidget() {
                 }
             } else if (!qrContent.isNullOrEmpty()) {
                 val bitmap = GymRepository.instance.createQRCodeBitmap(qrContent)
-                // QR Code 容器：保持白色背景以利掃描
+                // QR Code container: keep white background for scan reliability
                 Box(
                     modifier = GlanceModifier
                         .padding(12.dp)
@@ -100,7 +92,6 @@ class GymWidget : GlanceAppWidget() {
                     )
                 }
 
-                // 右下角的小提示
                 Box(
                     modifier = GlanceModifier.fillMaxSize().padding(8.dp),
                     contentAlignment = Alignment.BottomEnd
@@ -114,7 +105,6 @@ class GymWidget : GlanceAppWidget() {
                     )
                 }
             } else {
-                // 尚未生成狀態
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalAlignment = Alignment.CenterVertically
@@ -138,38 +128,42 @@ class RefreshAction : ActionCallback {
         Log.d("GymWidget", "RefreshAction triggered via Tap")
         val repository = GymRepository.instance
         val dataStore = DataStoreManager(context)
-        val uid = dataStore.uidFlow.first()
-        val pwd = dataStore.getPassword()
+        var success = false
 
-        if (uid != null && pwd != null) {
-            // 開始加載，設置加載狀態
-            updateAppWidgetState(context, glanceId) { prefs ->
-                prefs[GymWidget.IS_LOADING_KEY] = true
-            }
-            GymWidget().update(context, glanceId)
+        updateAppWidgetState(context, glanceId) { prefs ->
+            prefs[GymWidget.IS_LOADING_KEY] = true
+        }
+        GymWidget().update(context, glanceId)
 
-            val hashCode = repository.getHashCode()
-            if (hashCode != null) {
-                val uuid = repository.login(uid, pwd, hashCode)
-                if (uuid != null) {
-                    val qrCode = repository.generateQRCode(uuid)
-                    if (qrCode != null) {
-                        updateAppWidgetState(context, glanceId) { prefs ->
-                            prefs[GymWidget.QR_CODE_KEY] = qrCode
-                            prefs[GymWidget.IS_LOADING_KEY] = false
+        try {
+            val uid = dataStore.uidFlow.first()
+            val pwd = dataStore.getPassword()
+
+            if (uid != null && pwd != null) {
+                val hashCode = repository.getHashCode()
+                if (hashCode != null) {
+                    val uuid = repository.login(uid, pwd, hashCode)
+                    if (uuid != null) {
+                        val qrCode = repository.generateQRCode(uuid)
+                        if (qrCode != null) {
+                            updateAppWidgetState(context, glanceId) { prefs ->
+                                prefs[GymWidget.QR_CODE_KEY] = qrCode
+                            }
+                            success = true
                         }
-                        GymWidget().update(context, glanceId)
-                        return
                     }
                 }
             }
+        } finally {
+            updateAppWidgetState(context, glanceId) { prefs ->
+                prefs[GymWidget.IS_LOADING_KEY] = false
+            }
+            GymWidget().update(context, glanceId)
         }
-        // 失敗時也設置加載狀態為 false
-        updateAppWidgetState(context, glanceId) { prefs ->
-            prefs[GymWidget.IS_LOADING_KEY] = false
+
+        if (!success) {
+            Log.e("GymWidget", "RefreshAction failed")
         }
-        GymWidget().update(context, glanceId)
-        Log.e("GymWidget", "RefreshAction failed")
     }
 }
 
