@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "GYM QR Displayer"
 include(":app")
+include(":wear")

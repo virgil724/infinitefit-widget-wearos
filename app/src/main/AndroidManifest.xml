@@ -53,6 +53,19 @@
                 android:resource="@xml/gym_popup_widget_info" />
         </receiver>
 
+        <!-- 接收手錶端請求，傳送憑證 -->
+        <service
+            android:name=".WearDataLayerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/request_credentials"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.gymqrdisplayer"
+    namespace = "com.example.gymqrdisplayer.wear"
     compileSdk = 36
 
     defaultConfig {
@@ -14,13 +14,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -40,32 +38,43 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation(libs.material)
+    // Wear OS Compose
+    implementation(libs.wear.compose.material)
+    implementation(libs.wear.compose.foundation)
+    implementation(libs.wear.compose.navigation)
 
+    // Horologist layout helpers
+    implementation(libs.horologist.compose.layout)
+
+    // 網路 & QR（與 app/ 相同版本）
     implementation(libs.okhttp)
     implementation(libs.jsoup)
     implementation(libs.zxing)
-    implementation(libs.androidx.glance.appwidget)
-    implementation(libs.androidx.glance.material3)
+
+    // 憑證儲存
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
 
+    // Data Layer（手錶端接收）
     implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
+    // ViewModel
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Wear Tiles
+    implementation(libs.androidx.wear.tiles)
+    implementation(libs.androidx.wear.tiles.material)
+
+    // WearOS 文字輸入（RemoteInputIntentHelper）
+    implementation(libs.wear.input)
+
+    // Core
+    implementation(libs.androidx.core.ktx)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation("com.google.guava:guava:33.1.0-android")
 }

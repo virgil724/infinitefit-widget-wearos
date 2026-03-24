@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Wear module build outputs
+wear/build/
+wear/release/
