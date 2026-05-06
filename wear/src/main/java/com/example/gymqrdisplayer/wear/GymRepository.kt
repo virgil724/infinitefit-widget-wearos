@@ -13,6 +13,7 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +43,13 @@ class GymRepository {
                 })
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
+                .apply {
+                    if (BuildConfig.DEBUG) {
+                        val logging = HttpLoggingInterceptor { msg -> Log.d(TAG, "[HTTP] $msg") }
+                        logging.level = HttpLoggingInterceptor.Level.BODY
+                        addInterceptor(logging)
+                    }
+                }
                 .build()
         }
     }
@@ -86,7 +94,7 @@ class GymRepository {
                 .build()
 
             val request = Request.Builder()
-                .url("https://infapp.eip.tw/apis/_appinf/login")
+                .url("https://infapp.eip.tw/apis/_appinf3/login")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "https://infapp.eip.tw/infinitefit/login?dlogin=n")
                 .post(formBody)
@@ -120,7 +128,7 @@ class GymRepository {
                 .build()
 
             val request = Request.Builder()
-                .url("https://infapp.eip.tw/apis/_appinf/genQRCode")
+                .url("https://infapp.eip.tw/apis/_appinf3/genQRCode")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "https://infapp.eip.tw/infinitefit/index")
                 .post(formBody)
@@ -132,6 +140,7 @@ class GymRepository {
                 if (json.optString("Status") == "Success") {
                     json.getString("QRCode")
                 } else {
+                    Log.e(TAG, "generateQRCode failed: status=${json.optString("Status")} msg=${json.optString("Msg")} raw=$responseBody")
                     null
                 }
             }

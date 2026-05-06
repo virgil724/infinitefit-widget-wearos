@@ -34,6 +34,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -77,4 +78,5 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation("com.google.guava:guava:33.1.0-android")
+    debugImplementation(libs.okhttp.logging)
 }
