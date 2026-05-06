@@ -48,8 +48,7 @@ dependencies {
     implementation(libs.horologist.compose.layout)
 
     // 網路 & QR（與 app/ 相同版本）
-    implementation(libs.okhttp)
-    implementation(libs.jsoup)
+    implementation(project(":core"))
     implementation(libs.zxing)
 
     // 憑證儲存
@@ -78,5 +77,4 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation("com.google.guava:guava:33.1.0-android")
-    debugImplementation(libs.okhttp.logging)
 }

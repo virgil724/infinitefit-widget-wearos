@@ -51,8 +51,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.material)
 
-    implementation(libs.okhttp)
-    implementation(libs.jsoup)
+    implementation(project(":core"))
     implementation(libs.zxing)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
@@ -69,5 +68,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    debugImplementation(libs.okhttp.logging)
 }
