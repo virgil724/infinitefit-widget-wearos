@@ -104,26 +104,15 @@ fun QrContent(onRetry: () -> Unit) {
             try {
                 val uid = dataStore.uidFlow.first()
                 val pwd = dataStore.getPassword()
-
-                if (uid != null && pwd != null) {
-                    val hashCode = repository.getHashCode()
-                    if (hashCode != null) {
-                        val uuid = repository.login(uid, pwd, hashCode)
-                        if (uuid != null) {
-                            val qrCode = repository.generateQRCode(uuid)
-                            if (qrCode != null) {
-                                qrBitmap = repository.createQRCodeBitmap(qrCode)
-                            } else {
-                                errorMsg = "Failed to generate QR"
-                            }
-                        } else {
-                            errorMsg = "Login failed - check credentials"
-                        }
-                    } else {
-                        errorMsg = "Connection error"
-                    }
-                } else {
+                if (uid.isNullOrBlank() || pwd.isNullOrBlank()) {
                     errorMsg = "Credentials not set"
+                    return@launch
+                }
+                val qrCode = repository.generateQrCodeForUser(uid, pwd)
+                if (qrCode != null) {
+                    qrBitmap = repository.createQRCodeBitmap(qrCode)
+                } else {
+                    errorMsg = "Failed to generate QR"
                 }
             } catch (e: Exception) {
                 errorMsg = e.message

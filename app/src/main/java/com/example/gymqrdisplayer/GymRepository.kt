@@ -19,6 +19,8 @@ import org.jsoup.Jsoup
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class GymRepository {
@@ -26,6 +28,20 @@ class GymRepository {
     companion object {
         val instance: GymRepository by lazy { GymRepository() }
         internal val TAG = "GymRepo"
+
+        private val uuidMutex = Mutex()
+        @Volatile private var cachedUuid: String? = null
+        @Volatile private var uuidCachedAt: Long = 0L
+        private const val UUID_TTL_MS = 15 * 60 * 1000L
+
+        fun cacheUuid(uuid: String) {
+            cachedUuid = uuid
+            uuidCachedAt = System.currentTimeMillis()
+        }
+
+        fun invalidateUuid() {
+            cachedUuid = null
+        }
 
         private val client by lazy {
             OkHttpClient.Builder()
@@ -145,6 +161,22 @@ class GymRepository {
             Log.e(TAG, "generateQRCode Error", e)
             null
         }
+    }
+
+    suspend fun generateQrCodeForUser(uid: String, pwd: String): String? {
+        val uuid = uuidMutex.withLock {
+            val now = System.currentTimeMillis()
+            if (cachedUuid != null && (now - uuidCachedAt) < UUID_TTL_MS) {
+                cachedUuid
+            } else {
+                val hashCode = getHashCode() ?: return@withLock null
+                val newUuid = login(uid, pwd, hashCode) ?: return@withLock null
+                cachedUuid = newUuid
+                uuidCachedAt = now
+                newUuid
+            }
+        } ?: return null
+        return generateQRCode(uuid)
     }
 
     fun createQRCodeBitmap(content: String): Bitmap {

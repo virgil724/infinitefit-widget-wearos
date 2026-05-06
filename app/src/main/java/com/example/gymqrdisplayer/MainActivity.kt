@@ -166,6 +166,7 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
                                 if (hashCode != null) {
                                     val uuid = repository.login(uid, pwd, hashCode)
                                     if (uuid != null) {
+                                        GymRepository.cacheUuid(uuid)
                                         dataStoreManager.saveCredentials(uid, pwd)
                                         loginError = null
                                     } else {

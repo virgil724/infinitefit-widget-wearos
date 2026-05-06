@@ -7,13 +7,17 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,8 +40,9 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
     private var loadingJob: Job? = null
 
     // UUID 快取（15 分鐘 TTL，避免重複登入）
+    private val uuidMutex = Mutex()
     private var cachedUuid: String? = null
-    private var uuidCachedAt: Long = 0
+    private var uuidCachedAt: Long = 0L
     private val UUID_TTL_MS = 15 * 60 * 1000L
 
     init {
@@ -47,7 +52,9 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
                 .distinctUntilChanged()
                 .collect { uid ->
                     if (!uid.isNullOrBlank()) {
-                        Log.d("WearVM", "UID updated to $uid, checking if need to load (isActive=${loadingJob?.isActive})...")
+                        Log.d("WearVM", "UID updated to $uid, clearing UUID cache")
+                        cachedUuid = null
+                        uuidCachedAt = 0L
                         if (loadingJob?.isActive != true) {
                             loadQrCode()
                         }
@@ -73,24 +80,24 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             try {
-                val now = System.currentTimeMillis()
-                val uuid = if (cachedUuid != null && (now - uuidCachedAt) < UUID_TTL_MS) {
-                    Log.d("WearVM", "Using cached UUID")
-                    cachedUuid!!
-                } else {
-                    val hashCode = repository.getHashCode()
-                    if (hashCode == null) {
-                        _uiState.value = UiState.Error("無法取得伺服器回應，請確認網路連線")
-                        return@launch
+                val (uuid, authError) = uuidMutex.withLock {
+                    val now = System.currentTimeMillis()
+                    if (cachedUuid != null && (now - uuidCachedAt) < UUID_TTL_MS) {
+                        Log.d("WearVM", "Using cached UUID")
+                        Pair(cachedUuid, null)
+                    } else {
+                        val hashCode = repository.getHashCode()
+                            ?: return@withLock Pair(null, "無法取得伺服器回應，請確認網路連線")
+                        val newUuid = repository.login(uid, pwd, hashCode)
+                            ?: return@withLock Pair(null, "登入失敗，請確認帳號密碼")
+                        cachedUuid = newUuid
+                        uuidCachedAt = now
+                        Pair(newUuid, null)
                     }
-                    val newUuid = repository.login(uid, pwd, hashCode)
-                    if (newUuid == null) {
-                        _uiState.value = UiState.Error("登入失敗，請確認帳號密碼")
-                        return@launch
-                    }
-                    cachedUuid = newUuid
-                    uuidCachedAt = now
-                    newUuid
+                }
+                if (uuid == null) {
+                    _uiState.value = UiState.Error(authError ?: "認證失敗")
+                    return@launch
                 }
 
                 val qrContent = repository.generateQRCode(uuid)
@@ -134,7 +141,7 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val nodeClient = Wearable.getNodeClient(getApplication<Application>())
-                val nodes = nodeClient.connectedNodes.await()
+                val nodes = withTimeout(5000L) { nodeClient.connectedNodes.await() }
                 if (nodes.isEmpty()) {
                     _uiState.value = UiState.Error("未連接到手機，請確認手機在範圍內")
                     return@launch
@@ -144,6 +151,8 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
                     messageClient.sendMessage(node.id, "/request_credentials", ByteArray(0)).await()
                     Log.d("WearVM", "Credentials requested from ${node.displayName}")
                 }
+            } catch (e: TimeoutCancellationException) {
+                _uiState.value = UiState.Error("手機連線逾時，請確認手機在範圍內")
             } catch (e: Exception) {
                 Log.e("WearVM", "Error requesting credentials", e)
                 _uiState.value = UiState.Error("無法連接手機，請稍後再試")

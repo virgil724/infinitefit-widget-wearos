@@ -196,29 +196,19 @@ class RefreshAction : ActionCallback {
             val uid = dataStore.uidFlow.first()
             val pwd = dataStore.getPassword()
 
-            if (uid != null && pwd != null) {
-                val hashCode = repository.getHashCode()
-                if (hashCode != null) {
-                    val uuid = repository.login(uid, pwd, hashCode)
-                    if (uuid != null) {
-                        val qrCode = repository.generateQRCode(uuid)
-                        if (qrCode != null) {
-                            val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-                            updateAppWidgetState(context, glanceId) { prefs ->
-                                prefs[GymWidget.QR_CODE_KEY] = qrCode
-                                prefs[GymWidget.LAST_UPDATED_KEY] = timeStr
-                            }
-                        } else {
-                            errorMessage = "無法產生 QR Code"
-                        }
-                    } else {
-                        errorMessage = "登入失敗，請檢查帳號密碼"
+            if (uid.isNullOrBlank() || pwd.isNullOrBlank()) {
+                errorMessage = "尚未設定帳號密碼"
+            } else {
+                val qrCode = repository.generateQrCodeForUser(uid, pwd)
+                if (qrCode != null) {
+                    val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                    updateAppWidgetState(context, glanceId) { prefs ->
+                        prefs[GymWidget.QR_CODE_KEY] = qrCode
+                        prefs[GymWidget.LAST_UPDATED_KEY] = timeStr
                     }
                 } else {
-                    errorMessage = "連線失敗"
+                    errorMessage = "無法取得 QR Code，請重試"
                 }
-            } else {
-                errorMessage = "尚未設定帳號密碼"
             }
         } catch (e: SecurityException) {
             Log.e("GymWidget", "SecurityException in RefreshAction", e)

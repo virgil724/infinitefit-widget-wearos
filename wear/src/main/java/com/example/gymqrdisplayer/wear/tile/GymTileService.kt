@@ -16,42 +16,59 @@ import com.example.gymqrdisplayer.wear.DataStoreManager
 import com.example.gymqrdisplayer.wear.GymRepository
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 
 class GymTileService : TileService() {
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onTileRequest(
         requestParams: RequestBuilders.TileRequest
     ): ListenableFuture<TileBuilders.Tile> {
-        return Futures.immediateFuture(buildTile())
+        val future = SettableFuture.create<TileBuilders.Tile>()
+        serviceScope.launch {
+            val qrContent = readQrContent()
+            future.set(buildTile(qrContent))
+        }
+        return future
     }
 
     override fun onResourcesRequest(
         requestParams: RequestBuilders.ResourcesRequest
     ): ListenableFuture<ResourceBuilders.Resources> {
-        return Futures.immediateFuture(buildResources())
+        val future = SettableFuture.create<ResourceBuilders.Resources>()
+        serviceScope.launch {
+            val qrContent = readQrContent()
+            future.set(buildResources(qrContent))
+        }
+        return future
     }
 
     override fun onTileEnterEvent(requestParams: EventBuilders.TileEnterEvent) {
-        // 使用者滑到 Tile 時請求更新內容
         getUpdater(this).requestUpdate(GymTileService::class.java)
     }
 
-    private fun getQrContent(): String? = runBlocking {
-        try {
-            DataStoreManager(applicationContext).qrContentFlow.first()
-        } catch (e: Exception) {
-            Log.e("GymTile", "Error reading QR content from DataStore", e)
-            null
-        }
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
     }
 
-    private fun buildTile(): TileBuilders.Tile {
-        val qrContent = getQrContent()
-        val resourcesVersion = if (qrContent != null) "qr_${qrContent.hashCode()}" else "empty"
+    private suspend fun readQrContent(): String? = try {
+        DataStoreManager(applicationContext).qrContentFlow.first()
+    } catch (e: Exception) {
+        Log.e("GymTile", "Error reading QR content from DataStore", e)
+        null
+    }
 
+    private fun buildTile(qrContent: String?): TileBuilders.Tile {
+        val resourcesVersion = if (qrContent != null) "qr_${qrContent.hashCode()}" else "empty"
         val layout = if (qrContent != null) buildQrLayout() else buildNoQrLayout()
 
         return TileBuilders.Tile.Builder()
@@ -72,22 +89,15 @@ class GymTileService : TileService() {
             .build()
     }
 
-    private fun buildResources(): ResourceBuilders.Resources {
-        val qrContent = getQrContent()
+    private suspend fun buildResources(qrContent: String?): ResourceBuilders.Resources {
         val resourcesVersion = if (qrContent != null) "qr_${qrContent.hashCode()}" else "empty"
-
         val builder = ResourceBuilders.Resources.Builder().setVersion(resourcesVersion)
 
         if (qrContent != null) {
             try {
-                // Now suspending, need to runBlocking since buildResources is synchronous in this scope
-                // However, since buildResources is wrapped in a future, it's safer to use runBlocking here
-                // or preferably migrate the entire future to a Coroutine. For simplicity, runBlocking here is fine
-                // since onResourcesRequest runs on a background binder thread.
-                val bitmap = runBlocking { GymRepository.instance.createQRCodeBitmapForTile(qrContent) }
+                val bitmap = GymRepository.instance.createQRCodeBitmapForTile(qrContent)
                 val buffer = ByteBuffer.allocate(bitmap.byteCount)
                 bitmap.copyPixelsToBuffer(buffer)
-
                 builder.addIdToImageMapping(
                     "qr_image",
                     ResourceBuilders.ImageResource.Builder()
