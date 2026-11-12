@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import androidx.wear.tiles.TileService
+import com.example.gymqrdisplayer.wear.tile.GymTileService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -44,6 +46,8 @@ class DataStoreManager(private val context: Context) {
             commit()
         }
         context.dataStore.edit { it[UID_KEY] = uid }
+        // 帳號變更後通知 Tile 重新請求（否則會一直停在「尚未登入」）
+        TileService.getUpdater(context).requestUpdate(GymTileService::class.java)
     }
 
     suspend fun getPassword(): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

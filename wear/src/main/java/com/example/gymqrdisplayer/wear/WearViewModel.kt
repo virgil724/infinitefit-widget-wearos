@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.wear.tiles.TileService
+import com.example.gymqrdisplayer.wear.tile.GymTileService
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -109,6 +111,8 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
 
                 // 儲存 QR 內容供 Tile 使用
                 dataStoreManager.saveQrContent(qrContent)
+                // App 成功取得 QR 時也通知 Tile 更新（修復卡在「尚未登入」/「更新失敗」的 Tile）
+                TileService.getUpdater(getApplication()).requestUpdate(GymTileService::class.java)
 
                 val bitmap = repository.createQRCodeBitmap(qrContent)
                 val updatedAt = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
