@@ -26,7 +26,7 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
 
     sealed class UiState {
         object Loading : UiState()
-        data class Success(val qrBitmap: Bitmap, val updatedAt: String) : UiState()
+        data class Success(val qrBitmap: Bitmap, val updatedAt: String, val generatedAtMillis: Long) : UiState()
         data class Error(val message: String) : UiState()
         object NoCredentials : UiState()
     }
@@ -112,7 +112,7 @@ class WearViewModel(application: Application) : AndroidViewModel(application) {
 
                 val bitmap = repository.createQRCodeBitmap(qrContent)
                 val updatedAt = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-                _uiState.value = UiState.Success(bitmap, updatedAt)
+                _uiState.value = UiState.Success(bitmap, updatedAt, System.currentTimeMillis())
 
             } catch (e: Exception) {
                 Log.e("WearVM", "Error loading QR", e)

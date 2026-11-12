@@ -67,6 +67,7 @@ dependencies {
     // Wear Tiles
     implementation(libs.androidx.wear.tiles)
     implementation(libs.androidx.wear.tiles.material)
+    implementation(libs.androidx.wear.protolayout.material)
 
     // WearOS 文字輸入（RemoteInputIntentHelper）
     implementation(libs.wear.input)

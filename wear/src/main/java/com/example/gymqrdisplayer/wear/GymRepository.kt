@@ -8,6 +8,8 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class GymRepository {
@@ -15,6 +17,31 @@ class GymRepository {
     companion object {
         val instance: GymRepository by lazy { GymRepository() }
         internal val TAG = "WearGymRepo"
+
+        private val uuidMutex = Mutex()
+        @Volatile private var cachedUuid: String? = null
+        @Volatile private var uuidCachedAt: Long = 0L
+        private const val UUID_TTL_MS = 15 * 60 * 1000L
+    }
+
+    /** 完整流程（含 UUID 快取）：給 Tile 用，失敗回傳 null */
+    suspend fun fetchQrForUser(uid: String, pwd: String): String? {
+        val uuid = uuidMutex.withLock {
+            val now = System.currentTimeMillis()
+            if (cachedUuid != null && now - uuidCachedAt < UUID_TTL_MS) {
+                cachedUuid
+            } else {
+                val hashCode = getHashCode() ?: return@withLock null
+                login(uid, pwd, hashCode)?.also {
+                    cachedUuid = it
+                    uuidCachedAt = now
+                }
+            }
+        } ?: return null
+        return generateQRCode(uuid) ?: run {
+            cachedUuid = null // UUID 可能失效，下次重新登入
+            null
+        }
     }
 
     private val api = GymApiClient(tag = TAG, connectTimeoutSecs = 20, readTimeoutSecs = 20)

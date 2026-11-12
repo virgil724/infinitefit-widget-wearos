@@ -3,12 +3,20 @@ package com.example.gymqrdisplayer
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.glance.appwidget.LinearProgressIndicator
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.min
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -34,9 +42,6 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.GlanceTheme
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.first
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class GymWidget : GlanceAppWidget() {
 
@@ -46,7 +51,8 @@ class GymWidget : GlanceAppWidget() {
     companion object {
         val QR_CODE_KEY = stringPreferencesKey("qr_code_content")
         val IS_LOADING_KEY = booleanPreferencesKey("is_loading")
-        val LAST_UPDATED_KEY = stringPreferencesKey("last_updated")
+        val GENERATED_AT_KEY = longPreferencesKey("generated_at")
+        const val QR_VALID_SEC = 28
         val ERROR_MSG_KEY = stringPreferencesKey("error_msg")
     }
 
@@ -56,9 +62,22 @@ class GymWidget : GlanceAppWidget() {
                 val prefs = currentState<Preferences>()
                 val qrContent = prefs[QR_CODE_KEY]
                 val isLoading = prefs[IS_LOADING_KEY] ?: false
-                val lastUpdated = prefs[LAST_UPDATED_KEY]
+                val generatedAt = prefs[GENERATED_AT_KEY] ?: 0L
                 val errorMsg = prefs[ERROR_MSG_KEY]
-                WidgetContent(qrContent, isLoading, lastUpdated, errorMsg)
+
+                // 倒數：Glance session 存活期間每秒重組一次（純本地，不打 API）
+                var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                LaunchedEffect(generatedAt) {
+                    now = System.currentTimeMillis()
+                    while (generatedAt > 0 && now - generatedAt < QR_VALID_SEC * 1000L) {
+                        delay(1000)
+                        now = System.currentTimeMillis()
+                    }
+                }
+                val remaining = if (generatedAt == 0L) 0
+                    else (QR_VALID_SEC - ((now - generatedAt) / 1000).toInt()).coerceAtLeast(0)
+
+                WidgetContent(qrContent, isLoading, remaining, errorMsg)
             }
         }
     }
@@ -67,11 +86,11 @@ class GymWidget : GlanceAppWidget() {
     private fun WidgetContent(
         qrContent: String?,
         isLoading: Boolean,
-        lastUpdated: String?,
+        remaining: Int,
         errorMsg: String?
     ) {
         val size = LocalSize.current
-        val qrSize = min(size.width - 32.dp, size.height - 48.dp).coerceAtLeast(80.dp)
+        val qrSize = min(size.width - 32.dp, size.height - 40.dp).coerceAtLeast(80.dp)
 
         val baseModifier = GlanceModifier
             .fillMaxSize()
@@ -124,7 +143,7 @@ class GymWidget : GlanceAppWidget() {
                         )
                     )
                 }
-            } else if (!qrContent.isNullOrEmpty()) {
+            } else if (!qrContent.isNullOrEmpty() && remaining > 0) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalAlignment = Alignment.CenterVertically
@@ -145,16 +164,33 @@ class GymWidget : GlanceAppWidget() {
                         )
                     }
 
-                    if (!lastUpdated.isNullOrEmpty()) {
-                        Spacer(modifier = GlanceModifier.height(8.dp))
-                        Text(
-                            text = "更新時間: $lastUpdated",
-                            style = TextStyle(
-                                color = GlanceTheme.colors.onSurfaceVariant,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
+                    Spacer(modifier = GlanceModifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = remaining / QR_VALID_SEC.toFloat(),
+                        modifier = GlanceModifier.width(qrSize).height(6.dp).cornerRadius(3.dp),
+                        color = when {
+                            remaining <= 6 -> GlanceTheme.colors.error
+                            remaining <= 12 -> GlanceTheme.colors.tertiary
+                            else -> GlanceTheme.colors.primary
+                        },
+                        backgroundColor = GlanceTheme.colors.surfaceVariant
+                    )
+                }
+            } else if (!qrContent.isNullOrEmpty()) {
+                // 已過期：不顯示舊 QR，避免掃到失效的
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "已過期",
+                        style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 18.sp)
+                    )
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+                    Text(
+                        text = "點擊重新產生",
+                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp)
+                    )
                 }
             } else {
                 Column(
@@ -162,12 +198,13 @@ class GymWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Tap to",
-                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 14.sp)
+                        text = "GYM QR",
+                        style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 16.sp)
                     )
+                    Spacer(modifier = GlanceModifier.height(4.dp))
                     Text(
-                        text = "Generate",
-                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 16.sp)
+                        text = "點擊產生 QR Code",
+                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp)
                     )
                 }
             }
@@ -185,7 +222,7 @@ class RefreshAction : ActionCallback {
         updateAppWidgetState(context, glanceId) { prefs ->
             prefs[GymWidget.IS_LOADING_KEY] = true
             prefs.remove(GymWidget.QR_CODE_KEY)
-            prefs.remove(GymWidget.LAST_UPDATED_KEY)
+            prefs.remove(GymWidget.GENERATED_AT_KEY)
             prefs.remove(GymWidget.ERROR_MSG_KEY)
         }
         GymWidget().update(context, glanceId)
@@ -201,12 +238,12 @@ class RefreshAction : ActionCallback {
             } else {
                 val qrCode = repository.generateQrCodeForUser(uid, pwd)
                 if (qrCode != null) {
-                    val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                     updateAppWidgetState(context, glanceId) { prefs ->
                         prefs[GymWidget.QR_CODE_KEY] = qrCode
-                        prefs[GymWidget.LAST_UPDATED_KEY] = timeStr
+                        prefs[GymWidget.GENERATED_AT_KEY] = System.currentTimeMillis()
                     }
                 } else {
+                    GymRepository.invalidateUuid()
                     errorMessage = "無法取得 QR Code，請重試"
                 }
             }

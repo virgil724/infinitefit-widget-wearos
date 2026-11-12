@@ -44,9 +44,9 @@ Two Gradle modules sharing the same `applicationId` (`com.example.gymqrdisplayer
 
 `GymRepository` is a singleton that wraps a stateful `OkHttpClient` (with cookie jar). The gym backend requires a 3-step flow:
 
-1. `getHashCode()` — GET the login page at `infapp.eip.tw/infinitefit/login`, parse a hidden `HashCode` field (CSRF token) via Jsoup
-2. `login(uid, pwd, hashCode)` — POST to `/apis/_appinf/login`, returns a `uuid` session token
-3. `generateQRCode(uuid)` — POST to `/apis/_appinf/genQRCode`, returns the QR content string
+1. `getHashCode()` — GET the login page (cookies), then POST `/apis/_appinf4/Initial` which returns JSON with `HashCode` (CSRF token)
+2. `login(uid, pwd, hashCode)` — POST to `/apis/_appinf4/login`, returns a `uuid` session token
+3. `generateQRCode(uuid)` — POST to `/apis/_appinf4/genQRCode`, returns the QR content string
 
 `createQRCodeBitmap()` renders the QR string into a `Bitmap` using ZXing. The same `GymRepository` class exists in both `:app` and `:wear` modules — they are separate instances with identical logic.
 
@@ -73,7 +73,7 @@ Two-tier storage (same pattern in both modules):
 | `wear/MainActivity` | Entry point; hosts Compose navigation between `QrScreen` and `CredentialScreen` |
 | `WearViewModel` | Manages UI state (`Loading / Success / Error / NoCredentials`); caches UUID for 15 minutes to avoid repeated logins |
 | `WearCredentialSyncService` | `WearableListenerService`; receives `/gym_credentials` data from phone, saves via `DataStoreManager`, broadcasts `SYNC_COMPLETE` intent |
-| `GymTileService` | Wear Tiles service; reads cached QR content from DataStore (saved by `WearViewModel`) and renders it as an inline image resource |
+| `GymTileService` | Wear Tiles service; on every tile enter/tap fetches a fresh QR via `GymRepository.fetchQrForUser` (shared UUID cache), sizes it to fit the round screen, and switches to an "expired, tap to refresh" timeline entry after ~28s |
 
 ### Phone ↔ Watch Communication
 
