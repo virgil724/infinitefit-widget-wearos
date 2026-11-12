@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.virgil724.gymqr"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
     }
 
     // Release 簽名：CI 由 GitHub Secrets 提供；本機沒設環境變數時 release 不簽名
