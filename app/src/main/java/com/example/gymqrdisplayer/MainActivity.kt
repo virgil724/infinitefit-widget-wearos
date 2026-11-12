@@ -169,6 +169,9 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             }
         }
 
+        // ---- 背景連線檢查（數據節省模式 → 是否已除外）
+        BackgroundDataStatusCard()
+
         // ---- Account
         Card(
             modifier = Modifier.fillMaxWidth(),

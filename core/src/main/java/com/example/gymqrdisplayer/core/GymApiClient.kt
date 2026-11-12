@@ -78,7 +78,7 @@ class GymApiClient(
                 }
             }
         } catch (e: Exception) {
-            Log.e(tag, "getHashCode Error", e)
+            Log.e(tag, "getHashCode Error: ${e.javaClass.name}: ${e.message}", e)
             null
         }
     }
@@ -112,7 +112,7 @@ class GymApiClient(
                 }
             }
         } catch (e: Exception) {
-            Log.e(tag, "Login Error", e)
+            Log.e(tag, "Login Error: ${e.javaClass.name}: ${e.message}", e)
             null
         }
     }
@@ -144,7 +144,7 @@ class GymApiClient(
                 }
             }
         } catch (e: Exception) {
-            Log.e(tag, "generateQRCode Error", e)
+            Log.e(tag, "generateQRCode Error: ${e.javaClass.name}: ${e.message}", e)
             null
         }
     }

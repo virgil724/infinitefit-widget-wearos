@@ -1,6 +1,11 @@
 package com.example.gymqrdisplayer
 
+import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -9,7 +14,12 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.glance.appwidget.LinearProgressIndicator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.coerceAtLeast
@@ -54,6 +64,8 @@ class GymWidget : GlanceAppWidget() {
         val GENERATED_AT_KEY = longPreferencesKey("generated_at")
         const val QR_VALID_SEC = 28
         val ERROR_MSG_KEY = stringPreferencesKey("error_msg")
+        // 上次點擊時背景網路被系統擋住（數據節省模式等），改開了 QrBottomSheetActivity
+        val BG_BLOCKED_KEY = booleanPreferencesKey("bg_blocked")
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -64,6 +76,7 @@ class GymWidget : GlanceAppWidget() {
                 val isLoading = prefs[IS_LOADING_KEY] ?: false
                 val generatedAt = prefs[GENERATED_AT_KEY] ?: 0L
                 val errorMsg = prefs[ERROR_MSG_KEY]
+                val bgBlocked = prefs[BG_BLOCKED_KEY] ?: false
 
                 // 倒數：Glance session 存活期間每秒重組一次（純本地，不打 API）
                 var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -77,7 +90,7 @@ class GymWidget : GlanceAppWidget() {
                 val remaining = if (generatedAt == 0L) 0
                     else (QR_VALID_SEC - ((now - generatedAt) / 1000).toInt()).coerceAtLeast(0)
 
-                WidgetContent(qrContent, isLoading, remaining, errorMsg)
+                WidgetContent(qrContent, isLoading, remaining, errorMsg, bgBlocked)
             }
         }
     }
@@ -87,7 +100,8 @@ class GymWidget : GlanceAppWidget() {
         qrContent: String?,
         isLoading: Boolean,
         remaining: Int,
-        errorMsg: String?
+        errorMsg: String?,
+        bgBlocked: Boolean
     ) {
         val size = LocalSize.current
         val qrSize = min(size.width - 32.dp, size.height - 40.dp).coerceAtLeast(80.dp)
@@ -198,12 +212,12 @@ class GymWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "GYM QR",
+                        text = if (bgBlocked) "背景網路受限" else "GYM QR",
                         style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 16.sp)
                     )
                     Spacer(modifier = GlanceModifier.height(4.dp))
                     Text(
-                        text = "點擊產生 QR Code",
+                        text = if (bgBlocked) "點擊開啟 QR 畫面" else "點擊產生 QR Code",
                         style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp)
                     )
                 }
@@ -212,9 +226,63 @@ class GymWidget : GlanceAppWidget() {
     }
 }
 
+// 記錄點擊當下系統給這個 app 的網路狀態，用來判斷背景是否被擋。
+// activeNetwork=null 或 detailedState=BLOCKED 代表此 uid 目前被系統擋網路。
+// dataSaver: 1=DISABLED 2=WHITELISTED 3=ENABLED（數據節省模式擋背景）。
+internal fun logNetworkState(context: Context, stage: String) {
+    try {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val pm = context.getSystemService(PowerManager::class.java)
+        val net = cm.activeNetwork
+        val caps = net?.let { cm.getNetworkCapabilities(it) }
+        @Suppress("DEPRECATION")
+        val info = cm.activeNetworkInfo
+        val bucket = if (Build.VERSION.SDK_INT >= 28)
+            context.getSystemService(UsageStatsManager::class.java)?.appStandbyBucket else null
+        @Suppress("DEPRECATION")
+        Log.i(
+            "GymWidget",
+            "[net:$stage] activeNetwork=$net detailedState=${info?.detailedState} " +
+                "caps=$caps metered=${cm.isActiveNetworkMetered} " +
+                "dataSaver=${cm.restrictBackgroundStatus} powerSave=${pm.isPowerSaveMode} " +
+                "idle=${pm.isDeviceIdleMode} " +
+                "ignoringBatteryOpt=${pm.isIgnoringBatteryOptimizations(context.packageName)} " +
+                "standbyBucket=$bucket"
+        )
+    } catch (e: Exception) {
+        Log.w("GymWidget", "[net:$stage] failed: ${e.javaClass.name}: ${e.message}")
+    }
+}
+
+// Glance 的 callback 跑在 broadcast 裡，超過 10 秒會 ANR。網路請求放在這個獨立 scope，
+// callback 最多等 REFRESH_TIMEOUT_MS 就放手（請求本身會依 OkHttp 的 timeout 自行結束）。
+private val widgetIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+private const val REFRESH_TIMEOUT_MS = 8_000L
+private class QrFetchResult(val qrCode: String?)
+
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         Log.d("GymWidget", "RefreshAction triggered via Tap")
+        logNetworkState(context, "tap")
+
+        // 背景網路被擋（數據節省模式等）時這裡一定連不上；改開前景畫面，前景不受限制。
+        if (BackgroundData.isNetworkBlockedNow(context)) {
+            Log.w("GymWidget", "Background network blocked; opening QrBottomSheetActivity instead")
+            updateAppWidgetState(context, glanceId) { prefs ->
+                prefs[GymWidget.IS_LOADING_KEY] = false
+                prefs[GymWidget.BG_BLOCKED_KEY] = true
+                prefs.remove(GymWidget.QR_CODE_KEY)
+                prefs.remove(GymWidget.GENERATED_AT_KEY)
+                prefs.remove(GymWidget.ERROR_MSG_KEY)
+            }
+            GymWidget().update(context, glanceId)
+            context.startActivity(
+                Intent(context, QrBottomSheetActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            return
+        }
+
         val repository = GymRepository.instance
         val dataStore = DataStoreManager(context)
 
@@ -224,6 +292,7 @@ class RefreshAction : ActionCallback {
             prefs.remove(GymWidget.QR_CODE_KEY)
             prefs.remove(GymWidget.GENERATED_AT_KEY)
             prefs.remove(GymWidget.ERROR_MSG_KEY)
+            prefs.remove(GymWidget.BG_BLOCKED_KEY)
         }
         GymWidget().update(context, glanceId)
 
@@ -236,8 +305,13 @@ class RefreshAction : ActionCallback {
             if (uid.isNullOrBlank() || pwd.isNullOrBlank()) {
                 errorMessage = "尚未設定帳號密碼"
             } else {
-                val qrCode = repository.generateQrCodeForUser(uid, pwd)
-                if (qrCode != null) {
+                val fetch = widgetIoScope.async { repository.generateQrCodeForUser(uid, pwd) }
+                val result = withTimeoutOrNull(REFRESH_TIMEOUT_MS) { QrFetchResult(fetch.await()) }
+                val qrCode = result?.qrCode
+                if (result == null) {
+                    Log.w("GymWidget", "QR fetch exceeded ${REFRESH_TIMEOUT_MS}ms")
+                    errorMessage = "連線逾時，請重試"
+                } else if (qrCode != null) {
                     updateAppWidgetState(context, glanceId) { prefs ->
                         prefs[GymWidget.QR_CODE_KEY] = qrCode
                         prefs[GymWidget.GENERATED_AT_KEY] = System.currentTimeMillis()

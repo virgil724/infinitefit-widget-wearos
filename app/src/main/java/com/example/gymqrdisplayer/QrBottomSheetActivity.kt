@@ -262,5 +262,9 @@ fun QrContent(onClose: () -> Unit) {
                 }
             }
         }
+
+        // 數據節省模式擋住背景網路時，說明小工具為何改開這個畫面，並提供設定捷徑
+        Spacer(Modifier.height(16.dp))
+        DataSaverNotice()
     }
 }
