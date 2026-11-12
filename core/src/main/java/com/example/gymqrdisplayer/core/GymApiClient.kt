@@ -9,7 +9,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
-import org.jsoup.Jsoup
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +22,8 @@ class GymApiClient(
     companion object {
         private const val CLIENT_ID = "83137586U1"
         private const val BASE_URL = "https://infapp.eip.tw"
-        private const val API_PATH = "_appinf3"
+        private const val API_PATH = "_appinf4"
+        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
 
     private val client = OkHttpClient.Builder()
@@ -50,16 +50,32 @@ class GymApiClient(
     suspend fun getHashCode(): String? = withContext(Dispatchers.IO) {
         try {
             Log.d(tag, "1. Fetching HashCode...")
+            // Prime session cookies via the login page, then fetch HashCode from the Initial API
+            // (the login page no longer embeds HashCode in its HTML).
+            client.newCall(
+                Request.Builder()
+                    .url("$BASE_URL/infinitefit/login?dlogin=n")
+                    .header("User-Agent", USER_AGENT)
+                    .build()
+            ).execute().close()
             val request = Request.Builder()
-                .url("$BASE_URL/infinitefit/login?dlogin=n")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .url("$BASE_URL/apis/$API_PATH/Initial")
+                .header("User-Agent", USER_AGENT)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header("Referer", "$BASE_URL/infinitefit/login?dlogin=n")
+                .post(FormBody.Builder().add("lang", "tw").build())
                 .build()
             client.newCall(request).execute().use { response ->
-                val html = response.body?.string() ?: ""
-                val doc = Jsoup.parse(html)
-                val hashCode = doc.select("input[name=HashCode]").`val`()
-                if (hashCode.isNotBlank()) Log.d(tag, "HashCode fetched")
-                hashCode
+                val responseBody = response.body?.string() ?: ""
+                val json = JSONObject(responseBody)
+                val hashCode = json.optString("HashCode")
+                if (json.optString("Status") == "Success" && hashCode.isNotBlank()) {
+                    Log.d(tag, "HashCode fetched")
+                    hashCode
+                } else {
+                    Log.e(tag, "getHashCode failed: raw=$responseBody")
+                    null
+                }
             }
         } catch (e: Exception) {
             Log.e(tag, "getHashCode Error", e)
@@ -79,6 +95,7 @@ class GymApiClient(
                 .build()
             val request = Request.Builder()
                 .url("$BASE_URL/apis/$API_PATH/login")
+                .header("User-Agent", USER_AGENT)
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "$BASE_URL/infinitefit/login?dlogin=n")
                 .post(formBody)
@@ -90,7 +107,7 @@ class GymApiClient(
                     Log.d(tag, "Login success")
                     json.getString("uuid")
                 } else {
-                    Log.e(tag, "Login failed: ${json.optString("Msg")}")
+                    Log.e(tag, "Login failed: ${json.optString("Message", json.optString("Msg"))}")
                     null
                 }
             }
@@ -111,6 +128,7 @@ class GymApiClient(
                 .build()
             val request = Request.Builder()
                 .url("$BASE_URL/apis/$API_PATH/genQRCode")
+                .header("User-Agent", USER_AGENT)
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "$BASE_URL/infinitefit/index")
                 .post(formBody)

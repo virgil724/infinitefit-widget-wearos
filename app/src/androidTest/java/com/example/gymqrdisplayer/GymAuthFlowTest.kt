@@ -13,7 +13,6 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import org.jsoup.Jsoup
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Test
@@ -58,15 +57,24 @@ class GymAuthFlowTest {
 
             // Step 1: HashCode
             Log.d(TAG, "[$label] Step 1: GET $BASE/infinitefit/login?dlogin=n")
-            val hashCode = client.newCall(
+            client.newCall(
                 Request.Builder()
                     .url("$BASE/infinitefit/login?dlogin=n")
                     .header("User-Agent", "Mozilla/5.0")
                     .build()
             ).execute().use { r ->
-                val html = r.body?.string() ?: ""
-                Log.d(TAG, "[$label] Step 1 HTTP ${r.code}, html length=${html.length}")
-                Jsoup.parse(html).select("input[name=HashCode]").`val`()
+                Log.d(TAG, "[$label] Step 1 HTTP ${r.code}")
+            }
+            val hashCode = client.newCall(
+                Request.Builder()
+                    .url("$BASE/apis/$apiPath/Initial")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("Referer", "$BASE/infinitefit/login?dlogin=n")
+                    .post(FormBody.Builder().add("lang", "tw").build())
+                    .build()
+            ).execute().use { r ->
+                val raw = r.body?.string() ?: ""
+                runCatching { JSONObject(raw).optString("HashCode") }.getOrDefault("")
             }
             Log.d(TAG, "[$label] HashCode='$hashCode'")
 
@@ -95,7 +103,7 @@ class GymAuthFlowTest {
 
             val loginJson = runCatching { JSONObject(loginRaw) }.getOrDefault(JSONObject())
             val loginStatus = loginJson.optString("Status", "PARSE_ERROR")
-            val loginMsg = loginJson.optString("Msg", "")
+            val loginMsg = loginJson.optString("Message", loginJson.optString("Msg", ""))
             if (loginStatus != "Success") {
                 return@withContext Result(label, "login", loginStatus, loginMsg, loginRaw, null)
             }
@@ -145,8 +153,8 @@ class GymAuthFlowTest {
 
         Log.d(TAG, "=== GymAuthFlowTest START uid=$uid ===")
 
-        val r1 = runVariant(uid, pwd, "_appinf")
-        val r2 = runVariant(uid, pwd, "_appinf3")
+        val r1 = runVariant(uid, pwd, "_appinf3")
+        val r2 = runVariant(uid, pwd, "_appinf4")
 
         Log.d(TAG, "=== SUMMARY ===")
         listOf(r1, r2).forEach { r ->
@@ -159,9 +167,9 @@ class GymAuthFlowTest {
 
         when {
             r1.qrCode != null && r2.qrCode == null ->
-                Log.d(TAG, "DIAGNOSIS: _appinf works, _appinf3 does not — no endpoint change needed")
+                Log.d(TAG, "DIAGNOSIS: _appinf3 works, _appinf4 does not — no endpoint change needed")
             r2.qrCode != null && r1.qrCode == null ->
-                Log.e(TAG, "DIAGNOSIS: _appinf3 works but _appinf does not — UPDATE both GymRepository URLs to _appinf3")
+                Log.e(TAG, "DIAGNOSIS: _appinf4 works but _appinf3 does not — UPDATE GymApiClient API_PATH to _appinf4")
             r1.qrCode != null && r2.qrCode != null ->
                 Log.d(TAG, "DIAGNOSIS: Both variants work — original failure may be transient")
             else ->
