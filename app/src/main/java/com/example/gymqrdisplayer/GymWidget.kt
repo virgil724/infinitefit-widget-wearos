@@ -1,6 +1,10 @@
 package com.example.gymqrdisplayer
 
+import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.net.ConnectivityManager
+import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -212,9 +216,38 @@ class GymWidget : GlanceAppWidget() {
     }
 }
 
+// [diag] 記錄點擊當下系統給這個 app 的網路狀態，用來判斷背景是否被擋。
+// activeNetwork=null 或 detailedState=BLOCKED 代表此 uid 目前被系統擋網路。
+// dataSaver: 1=DISABLED 2=WHITELISTED 3=ENABLED（數據節省模式擋背景）。
+internal fun logNetworkState(context: Context, stage: String) {
+    try {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val pm = context.getSystemService(PowerManager::class.java)
+        val net = cm.activeNetwork
+        val caps = net?.let { cm.getNetworkCapabilities(it) }
+        @Suppress("DEPRECATION")
+        val info = cm.activeNetworkInfo
+        val bucket = if (Build.VERSION.SDK_INT >= 28)
+            context.getSystemService(UsageStatsManager::class.java)?.appStandbyBucket else null
+        @Suppress("DEPRECATION")
+        Log.i(
+            "GymWidget",
+            "[net:$stage] activeNetwork=$net detailedState=${info?.detailedState} " +
+                "caps=$caps metered=${cm.isActiveNetworkMetered} " +
+                "dataSaver=${cm.restrictBackgroundStatus} powerSave=${pm.isPowerSaveMode} " +
+                "idle=${pm.isDeviceIdleMode} " +
+                "ignoringBatteryOpt=${pm.isIgnoringBatteryOptimizations(context.packageName)} " +
+                "standbyBucket=$bucket"
+        )
+    } catch (e: Exception) {
+        Log.w("GymWidget", "[net:$stage] failed: ${e.javaClass.name}: ${e.message}")
+    }
+}
+
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         Log.d("GymWidget", "RefreshAction triggered via Tap")
+        logNetworkState(context, "tap")
         val repository = GymRepository.instance
         val dataStore = DataStoreManager(context)
 
@@ -243,6 +276,7 @@ class RefreshAction : ActionCallback {
                         prefs[GymWidget.GENERATED_AT_KEY] = System.currentTimeMillis()
                     }
                 } else {
+                    logNetworkState(context, "failed")
                     GymRepository.invalidateUuid()
                     errorMessage = "無法取得 QR Code，請重試"
                 }
