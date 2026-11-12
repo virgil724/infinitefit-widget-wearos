@@ -25,15 +25,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.app.RemoteInput
-import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
-import androidx.wear.compose.material.CompactChip
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Scaffold
-import androidx.wear.compose.material.ScalingLazyColumn
-import androidx.wear.compose.material.Text
-import androidx.wear.compose.material.TimeText
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.material3.Button
+import androidx.wear.compose.material3.ButtonDefaults
+import androidx.wear.compose.material3.CompactButton
+import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.TimeText
 import androidx.wear.input.RemoteInputIntentHelper
 
 @Composable
@@ -90,7 +90,7 @@ fun CredentialScreen(
         }
     }
 
-    Scaffold(timeText = { TimeText() }) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScalingLazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 24.dp),
@@ -99,14 +99,14 @@ fun CredentialScreen(
             item {
                 Text(
                     "設定帳號",
-                    style = MaterialTheme.typography.title3
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
             // UID 輸入
             item {
-                Chip(
+                Button(
                     onClick = {
                         val intent = RemoteInputIntentHelper.createActionRemoteInputIntent()
                         if (intent != null) {
@@ -121,14 +121,14 @@ fun CredentialScreen(
                     },
                     label = { Text(if (uid.isBlank()) "輸入帳號" else uid) },
                     secondaryLabel = { Text("UID") },
-                    colors = ChipDefaults.secondaryChipColors(),
+                    colors = ButtonDefaults.filledTonalButtonColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
             // 密碼輸入
             item {
-                Chip(
+                Button(
                     onClick = {
                         val intent = RemoteInputIntentHelper.createActionRemoteInputIntent()
                         if (intent != null) {
@@ -143,7 +143,7 @@ fun CredentialScreen(
                     },
                     label = { Text(if (pwd.isBlank()) "輸入密碼" else "•".repeat(pwd.length.coerceAtMost(8))) },
                     secondaryLabel = { Text("Password") },
-                    colors = ChipDefaults.secondaryChipColors(),
+                    colors = ButtonDefaults.filledTonalButtonColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -160,21 +160,21 @@ fun CredentialScreen(
                     enabled = uid.isNotBlank() && pwd.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Text("儲存並登入")
-                }
+                        .padding(top = 4.dp),
+                    label = { Text("儲存並登入") }
+                )
             }
 
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
             // 從手機同步
             item {
-                CompactChip(
+                CompactButton(
                     onClick = { viewModel.requestCredentialsFromPhone() },
                     label = { Text("從手機同步") }
                 )
             }
         }
+        TimeText()
     }
 }

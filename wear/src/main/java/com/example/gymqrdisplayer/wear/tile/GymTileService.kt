@@ -5,7 +5,6 @@ import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.ColorProp
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.TypeBuilders.StringLayoutConstraint
-import androidx.wear.protolayout.TypeBuilders.StringProp
 import androidx.wear.protolayout.expression.DynamicBuilders.DynamicColor
 import androidx.wear.protolayout.expression.DynamicBuilders.DynamicFloat
 import androidx.wear.protolayout.expression.DynamicBuilders.DynamicInstant
@@ -28,10 +27,14 @@ import androidx.wear.protolayout.LayoutElementBuilders.Spacer
 import androidx.wear.protolayout.ModifiersBuilders
 import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
-import androidx.wear.protolayout.material.Colors
-import androidx.wear.protolayout.material.CompactChip
-import androidx.wear.protolayout.material.Text
-import androidx.wear.protolayout.material.Typography
+import androidx.wear.protolayout.material3.MaterialScope
+import androidx.wear.protolayout.material3.Typography
+import androidx.wear.protolayout.material3.materialScope
+import androidx.wear.protolayout.material3.primaryLayout
+import androidx.wear.protolayout.material3.text
+import androidx.wear.protolayout.material3.textEdgeButton
+import androidx.wear.protolayout.types.LayoutColor
+import androidx.wear.protolayout.types.LayoutString
 import androidx.wear.tiles.EventBuilders
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
@@ -54,7 +57,7 @@ import java.nio.ByteBuffer
  *
  * - 每次滑到 / 點擊 Tile 都重新取得 QR（伺服器 QR 只有效約 30 秒）
  * - 版面：外圈倒數環 + 白色圓角卡片包住 QR（過期時底部顯示「已過期」）
- * - 倒數用多個 timeline entry 實現（不需背景網路），過期後切到「已過期」畫面
+ * - 倒數由 platform time 動態運算；顏色、文字、按鈕用 Wear Material 3（跟隨手錶主題色）
  */
 class GymTileService : TileService() {
 
@@ -70,13 +73,7 @@ class GymTileService : TileService() {
         const val CARD_CORNER_DP = 16f
         const val RING_DP = 5f
         
-        // Wear Material 預設色票（Colors.DEFAULT + Wear secondary/error）
-        val C_PRIMARY = Colors.DEFAULT.primary
-        val C_ON_SURFACE = Colors.DEFAULT.onSurface
-        val C_ON_SURFACE_VARIANT = Colors.DEFAULT.onSurface
-        val C_TRACK = Colors.DEFAULT.surface
-        const val C_WARN = 0xFFFDE293.toInt()   // Wear Material secondary
-        const val C_DANGER = 0xFFFD6B6B.toInt() // Wear Material error
+        // QR 卡片固定白底（掃描需要），其餘顏色都來自 Material 3 動態主題
         const val C_CARD = 0xFFFFFFFF.toInt()
     }
 
@@ -213,16 +210,35 @@ class GymTileService : TileService() {
             .durationUntil(DynamicInstant.withSecondsPrecision(Instant.ofEpochMilli(expiresAt)))
             .toIntSeconds()
 
-    private fun dynamicAccent(remaining: DynamicInt32): DynamicColor =
-        DynamicColor.onCondition(remaining.lte(6)).use(C_DANGER)
-            .elseUse(DynamicColor.onCondition(remaining.lte(12)).use(C_WARN).elseUse(C_PRIMARY))
+    private fun LayoutColor.dynamic(): DynamicColor = dynamicArgb ?: DynamicColor.constant(staticArgb)
+
+    /** 倒數顏色：主題 primary → 最後 12 秒 tertiary → 最後 6 秒 error */
+    private fun MaterialScope.dynamicAccent(remaining: DynamicInt32): DynamicColor =
+        DynamicColor.onCondition(remaining.lte(6)).use(colorScheme.error.dynamic())
+            .elseUse(
+                DynamicColor.onCondition(remaining.lte(12)).use(colorScheme.tertiary.dynamic())
+                    .elseUse(colorScheme.primary.dynamic())
+            )
 
     /**
-     * 外圈倒數：灰色軌道 + 彩色弧線。弧線長度是動態值、在 360° 版位內置中，
-     * 所以會從頂端往兩側對稱縮短，最後收在底部。progress 為 null 時只畫軌道。
+     * 外圈倒數：軌道 + 彩色弧線。弧線長度是動態值、在 360° 版位內置中，
+     * 所以會從頂端往兩側對稱縮短，最後收在底部。
      */
-    private fun ring(progress: ArcLine?): LayoutElement {
-        val box = Box.Builder()
+    private fun MaterialScope.countdownRing(remaining: DynamicInt32): LayoutElement {
+        val sweep = DynamicFloat.onCondition(remaining.lte(0)).use(0f)
+            .elseUse(remaining.asFloat().times(360f / QR_VALID_SEC))
+        val progress = ArcLine.Builder()
+            .setLength(DegreesProp.Builder(360f).setDynamicValue(sweep).build())
+            .setLayoutConstraintsForDynamicLength(AngularLayoutConstraint.Builder(360f).build())
+            .setThickness(dp(RING_DP))
+            .setColor(ColorProp.Builder(colorScheme.primary.staticArgb).setDynamicValue(dynamicAccent(remaining)).build())
+            .build()
+        val track = ArcLine.Builder()
+            .setLength(degrees(360f))
+            .setThickness(dp(RING_DP))
+            .setColor(colorScheme.surfaceContainer.prop)
+            .build()
+        return Box.Builder()
             .setWidth(expand())
             .setHeight(expand())
             .setModifiers(
@@ -230,24 +246,9 @@ class GymTileService : TileService() {
                     .setPadding(ModifiersBuilders.Padding.Builder().setAll(dp(3f)).build())
                     .build()
             )
-            .addContent(
-                arc(ArcLine.Builder().setLength(degrees(360f)).setThickness(dp(RING_DP)).setColor(argb(C_TRACK)).build())
-            )
-        if (progress != null) box.addContent(arc(progress))
-        return box.build()
-    }
-
-    private fun countdownRing(remaining: DynamicInt32): LayoutElement {
-        val sweep = DynamicFloat.onCondition(remaining.lte(0)).use(0f)
-            .elseUse(remaining.asFloat().times(360f / QR_VALID_SEC))
-        return ring(
-            ArcLine.Builder()
-                .setLength(DegreesProp.Builder(360f).setDynamicValue(sweep).build())
-                .setLayoutConstraintsForDynamicLength(AngularLayoutConstraint.Builder(360f).build())
-                .setThickness(dp(RING_DP))
-                .setColor(ColorProp.Builder(C_PRIMARY).setDynamicValue(dynamicAccent(remaining)).build())
-                .build()
-        )
+            .addContent(arc(track))
+            .addContent(arc(progress))
+            .build()
     }
 
     private fun arc(line: ArcLine) =
@@ -257,122 +258,110 @@ class GymTileService : TileService() {
             .addContent(line)
             .build()
 
-    private fun text(value: String, typography: Int, color: Int) =
-        Text.Builder(this, value)
-            .setTypography(typography)
-            .setColor(argb(color))
-            .build()
-
     /** 主畫面：外圈倒數 + 白卡 QR；點任何地方重新取得 */
-    private fun qrLayout(device: DeviceParameters, expiresAt: Long): LayoutElement {
-        val screen = device.screenWidthDp.takeIf { it > 0 } ?: 192
-        val cardSize = screen * CARD_RATIO
-        val qrSize = cardSize - CARD_PADDING_DP * 2
-        val remaining = remainingSec(expiresAt)
+    private fun qrLayout(device: DeviceParameters, expiresAt: Long): LayoutElement =
+        materialScope(this, device, allowDynamicTheme = true) {
+            val screen = device.screenWidthDp.takeIf { it > 0 } ?: 192
+            val cardSize = screen * CARD_RATIO
+            val qrSize = cardSize - CARD_PADDING_DP * 2
+            val remaining = remainingSec(expiresAt)
 
-        val card = Box.Builder()
-            .setWidth(dp(cardSize))
-            .setHeight(dp(cardSize))
-            .setModifiers(
-                ModifiersBuilders.Modifiers.Builder()
-                    .setBackground(
-                        ModifiersBuilders.Background.Builder()
-                            .setColor(argb(C_CARD))
-                            .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(CARD_CORNER_DP)).build())
-                            .build()
-                    )
-                    .setClickable(
-                        ModifiersBuilders.Clickable.Builder().setId("refresh").setOnClick(reloadAction()).build()
-                    )
-                    .build()
+            val card = Box.Builder()
+                .setWidth(dp(cardSize))
+                .setHeight(dp(cardSize))
+                .setModifiers(
+                    ModifiersBuilders.Modifiers.Builder()
+                        .setBackground(
+                            ModifiersBuilders.Background.Builder()
+                                .setColor(argb(C_CARD))
+                                .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(CARD_CORNER_DP)).build())
+                                .build()
+                        )
+                        .build()
+                )
+                .addContent(
+                    LayoutElementBuilders.Image.Builder()
+                        .setResourceId(QR_IMAGE_ID)
+                        .setWidth(dp(qrSize))
+                        .setHeight(dp(qrSize))
+                        .build()
+                )
+                .build()
+
+            // 底部狀態：倒數期間留白（外圈就是指示），過期後顯示「已過期」
+            val status = text(
+                LayoutString(
+                    " ",
+                    DynamicString.onCondition(remaining.lte(0)).use("已過期").elseUse(" "),
+                    StringLayoutConstraint.Builder("已過期").build()
+                ),
+                typography = Typography.TITLE_SMALL,
+                color = colorScheme.error
             )
-            .addContent(
-                LayoutElementBuilders.Image.Builder()
-                    .setResourceId(QR_IMAGE_ID)
-                    .setWidth(dp(qrSize))
-                    .setHeight(dp(qrSize))
-                    .build()
-            )
-            .build()
 
-        val content = Column.Builder()
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            // 上方留出與底部狀態列等高的空間，讓 QR 置中
-            .addContent(text(" ", Typography.TYPOGRAPHY_BUTTON, C_ON_SURFACE))
-            .addContent(Spacer.Builder().setHeight(dp(4f)).build())
-            .addContent(card)
-            .addContent(Spacer.Builder().setHeight(dp(4f)).build())
-            .addContent(statusText(remaining))
-            .build()
+            val content = Column.Builder()
+                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+                // 上方留出與底部狀態列等高的空間，讓 QR 置中
+                .addContent(text(LayoutString(" "), typography = Typography.TITLE_SMALL))
+                .addContent(Spacer.Builder().setHeight(dp(4f)).build())
+                .addContent(card)
+                .addContent(Spacer.Builder().setHeight(dp(4f)).build())
+                .addContent(status)
+                .build()
 
-        return Box.Builder()
-            .setWidth(expand())
-            .setHeight(expand())
-            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            // 整個 tile 都可點擊重新產生（enter 事件在新版 Wear OS 不保證送達，無法可靠地自動更新）
-            .setModifiers(
-                ModifiersBuilders.Modifiers.Builder()
-                    .setClickable(
-                        ModifiersBuilders.Clickable.Builder().setId("refresh_all").setOnClick(reloadAction()).build()
-                    )
-                    .build()
-            )
-            .addContent(countdownRing(remaining))
-            .addContent(content)
-            .build()
-    }
+            Box.Builder()
+                .setWidth(expand())
+                .setHeight(expand())
+                .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+                // 整個 tile 都可點擊重新產生（enter 事件在新版 Wear OS 不保證送達，無法可靠地自動更新）
+                .setModifiers(
+                    ModifiersBuilders.Modifiers.Builder()
+                        .setClickable(
+                            ModifiersBuilders.Clickable.Builder().setId("refresh_all").setOnClick(reloadAction()).build()
+                        )
+                        .build()
+                )
+                .addContent(countdownRing(remaining))
+                .addContent(content)
+                .build()
+        }
 
-    /** 底部狀態：倒數期間留白（外圈就是指示），過期後顯示「已過期」 */
-    private fun statusText(remaining: DynamicInt32): LayoutElement {
-        val dyn = DynamicString.onCondition(remaining.lte(0)).use("已過期").elseUse(" ")
-        return Text.Builder(
-            this,
-            StringProp.Builder(" ").setDynamicValue(dyn).build(),
-            StringLayoutConstraint.Builder("已過期").build()
-        )
-            .setTypography(Typography.TYPOGRAPHY_BUTTON)
-            .setColor(argb(C_DANGER))
-            .build()
-    }
-
-    /** 狀態畫面（過期 / 失敗 / 未登入）：灰色外圈 + 標題 + 說明 + Material CompactChip */
+    /** 狀態畫面（過期 / 失敗 / 未登入）：M3 primaryLayout + 底部 edge button */
     private fun messageLayout(
         device: DeviceParameters,
         title: String,
         subtitle: String?,
-        chipText: String,
+        buttonText: String,
         action: ActionBuilders.Action
-    ): LayoutElement {
-        val content = Column.Builder()
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(text(title, Typography.TYPOGRAPHY_TITLE1, C_ON_SURFACE))
-            .apply {
-                if (subtitle != null) {
-                    addContent(Spacer.Builder().setHeight(dp(2f)).build())
-                    addContent(text(subtitle, Typography.TYPOGRAPHY_CAPTION1, C_ON_SURFACE_VARIANT))
+    ): LayoutElement =
+        materialScope(this, device, allowDynamicTheme = true) {
+            primaryLayout(
+                mainSlot = {
+                    Column.Builder()
+                        .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+                        .addContent(text(LayoutString(title), typography = Typography.TITLE_LARGE))
+                        .apply {
+                            if (subtitle != null) {
+                                addContent(Spacer.Builder().setHeight(dp(4f)).build())
+                                addContent(
+                                    text(
+                                        LayoutString(subtitle),
+                                        typography = Typography.BODY_MEDIUM,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                        .build()
+                },
+                bottomSlot = {
+                    textEdgeButton(
+                        onClick = ModifiersBuilders.Clickable.Builder().setId("action").setOnClick(action).build()
+                    ) { text(LayoutString(buttonText)) }
                 }
-            }
-            .addContent(Spacer.Builder().setHeight(dp(12f)).build())
-            .addContent(
-                CompactChip.Builder(
-                    this,
-                    chipText,
-                    ModifiersBuilders.Clickable.Builder().setId("action").setOnClick(action).build(),
-                    device
-                ).build()
             )
-            .build()
-
-        return Box.Builder()
-            .setWidth(expand())
-            .setHeight(expand())
-            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(ring(null))
-            .addContent(content)
-            .build()
-    }
+        }
 
     private fun reloadAction(): ActionBuilders.Action = ActionBuilders.LoadAction.Builder().build()
 

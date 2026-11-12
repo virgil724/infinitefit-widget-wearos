@@ -41,11 +41,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material.CircularProgressIndicator
-import androidx.wear.compose.material.CompactChip
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Scaffold
-import androidx.wear.compose.material.Text
+import androidx.wear.compose.material3.CircularProgressIndicator
+import androidx.wear.compose.material3.CompactButton
+import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.Text
 import kotlinx.coroutines.delay
 
 private const val QR_VALID_SEC = 28
@@ -55,9 +54,9 @@ fun QrScreen(viewModel: WearViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     KeepBright()
 
-    Scaffold {
+    run {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
             when (val state = uiState) {
@@ -104,7 +103,7 @@ private fun KeepBright() {
 /** 外圈倒數：與 Tile 相同，從頂端往兩側對稱縮短（收在底部） */
 @Composable
 private fun Ring(progress: Float, color: Color) {
-    val track = MaterialTheme.colors.surface
+    val track = MaterialTheme.colorScheme.surfaceContainer
     Canvas(Modifier.fillMaxSize().padding(5.dp)) {
         val stroke = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
         drawArc(track, 0f, 360f, useCenter = false, style = Stroke(width = 5.dp.toPx()))
@@ -159,9 +158,9 @@ private fun QrCodeDisplay(
 
     val accent by animateColorAsState(
         when {
-            remaining <= 6 -> MaterialTheme.colors.error
-            remaining <= 12 -> MaterialTheme.colors.secondary
-            else -> MaterialTheme.colors.primary
+            remaining <= 6 -> MaterialTheme.colorScheme.error
+            remaining <= 12 -> MaterialTheme.colorScheme.tertiary
+            else -> MaterialTheme.colorScheme.primary
         },
         label = "accent"
     )
@@ -176,7 +175,7 @@ private fun QrCodeDisplay(
         Ring(progress = progress, color = accent)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             // 上方留出與底部狀態列等高的空間，讓 QR 置中
-            Text(" ", style = MaterialTheme.typography.button)
+            Text(" ", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             QrCard(cardSize, onRefresh) {
                 Image(
@@ -189,8 +188,8 @@ private fun QrCodeDisplay(
             // 倒數期間留白（外圈就是指示），過期才顯示
             Text(
                 if (remaining > 0) " " else "已過期",
-                style = MaterialTheme.typography.button,
-                color = MaterialTheme.colors.error
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
     }
@@ -204,12 +203,12 @@ private fun MessageDisplay(title: String, message: String, chip: String?, onClic
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(horizontal = 24.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.title2, textAlign = TextAlign.Center)
+            Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
             Spacer(Modifier.height(2.dp))
-            Text(message, style = MaterialTheme.typography.caption1, color = MaterialTheme.colors.onSurfaceVariant, textAlign = TextAlign.Center)
+            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             if (chip != null) {
                 Spacer(Modifier.height(12.dp))
-                CompactChip(onClick = onClick, label = { Text(chip) })
+                CompactButton(onClick = onClick, label = { Text(chip) })
             }
         }
     }

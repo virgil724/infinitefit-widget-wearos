@@ -8,7 +8,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.wear.compose.material.MaterialTheme
+import androidx.compose.ui.platform.LocalContext
+import androidx.wear.compose.material3.ColorScheme
+import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.dynamicColorScheme
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
@@ -24,7 +27,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun WearApp() {
-    MaterialTheme {
+    // Wear Material 3：有系統動態主題就跟隨手錶主題色，否則用 M3 預設色
+    val colorScheme = dynamicColorScheme(LocalContext.current) ?: ColorScheme()
+    MaterialTheme(colorScheme = colorScheme) {
         val navController = rememberSwipeDismissableNavController()
         val viewModel: WearViewModel = viewModel()
         val uiState by viewModel.uiState.collectAsState()

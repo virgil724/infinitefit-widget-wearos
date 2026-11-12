@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.gymqrdisplayer.wear"
-    compileSdk = 36
+    compileSdk = 37 // wear compose 1.7 要求
 
     defaultConfig {
         applicationId = "io.github.virgil724.gymqr"
@@ -55,12 +55,9 @@ android {
 
 dependencies {
     // Wear OS Compose
-    implementation(libs.wear.compose.material)
+    implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
-
-    // Horologist layout helpers
-    implementation(libs.horologist.compose.layout)
 
     // 網路 & QR（與 app/ 相同版本）
     implementation(project(":core"))
@@ -81,8 +78,9 @@ dependencies {
 
     // Wear Tiles
     implementation(libs.androidx.wear.tiles)
-    implementation(libs.androidx.wear.tiles.material)
-    implementation(libs.androidx.wear.protolayout.material)
+    implementation(libs.androidx.wear.protolayout)
+    implementation(libs.androidx.wear.protolayout.expression)
+    implementation(libs.androidx.wear.protolayout.material3)
 
     // WearOS 文字輸入（RemoteInputIntentHelper）
     implementation(libs.wear.input)
