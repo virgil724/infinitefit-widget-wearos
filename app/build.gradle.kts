@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.virgil724.gymqr"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.1.2-debug1"
+        versionCode = 5
+        versionName = "1.1.2-debug2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

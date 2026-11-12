@@ -169,6 +169,8 @@ fun LoginScreen(dataStoreManager: DataStoreManager, modifier: Modifier = Modifie
             }
         }
 
+        DataSaverNotice()
+
         // ---- Account
         Card(
             modifier = Modifier.fillMaxWidth(),
