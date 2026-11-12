@@ -28,5 +28,5 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.zxing)
     implementation(libs.kotlinx.coroutines.android)
-    debugImplementation(libs.okhttp.logging)
+    implementation(libs.okhttp.logging) // 只在 BuildConfig.DEBUG 時啟用
 }

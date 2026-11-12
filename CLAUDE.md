@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Structure
 
-Two Gradle modules sharing the same `applicationId` (`com.example.gymqrdisplayer`):
+Gradle modules sharing the same `applicationId` (`io.github.virgil724.gymqr`; Kotlin packages/namespaces stay `com.example.gymqrdisplayer*`):
 
 - **`:app`** — Phone/tablet app (minSdk 26, compileSdk 36)
 - **`:wear`** — Wear OS watch app (separate module under `wear/`)
@@ -84,6 +84,10 @@ Phone sends:  DataItem "/gym_credentials" (uid, pwd)  →  Watch WearCredentialS
 ```
 
 The watch can also enter credentials manually via `CredentialScreen` without requiring the phone.
+
+## Release
+
+`.github/workflows/release.yml` builds signed phone + wear APKs on `v*` tags and publishes a GitHub Release. Signing comes from env vars `GYMQR_KEYSTORE`, `GYMQR_KEYSTORE_PASSWORD`, `GYMQR_KEY_ALIAS`, `GYMQR_KEY_PASSWORD` (GitHub Secrets in CI; the keystore is base64 in `GYMQR_KEYSTORE_BASE64`). The tag must match `versionName` in both modules.
 
 ## Key Dependencies
 

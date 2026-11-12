@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="gym_encrypted_prefs.xml"/>
-    <exclude domain="datastore" path="gym_prefs.preferences_pb"/>
+    <exclude domain="file" path="datastore/gym_prefs.preferences_pb"/>
 </full-backup-content>

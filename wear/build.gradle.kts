@@ -9,15 +9,30 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.gymqrdisplayer"
+        applicationId = "io.github.virgil724.gymqr"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    // Release 簽名：CI 由 GitHub Secrets 提供；本機沒設環境變數時 release 不簽名
+    signingConfigs {
+        create("release") {
+            System.getenv("GYMQR_KEYSTORE")?.let { ks ->
+                storeFile = file(ks)
+                storePassword = System.getenv("GYMQR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("GYMQR_KEY_ALIAS")
+                keyPassword = System.getenv("GYMQR_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (System.getenv("GYMQR_KEYSTORE") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

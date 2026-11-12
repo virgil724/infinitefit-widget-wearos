@@ -380,7 +380,7 @@ class GymTileService : TileService() {
         ActionBuilders.LaunchAction.Builder()
             .setAndroidActivity(
                 ActionBuilders.AndroidActivity.Builder()
-                    .setPackageName("com.example.gymqrdisplayer")
+                    .setPackageName(packageName)
                     .setClassName("com.example.gymqrdisplayer.wear.MainActivity")
                     .build()
             )
